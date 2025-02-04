@@ -1,0 +1,43 @@
+---
+- name: copy app files and start application
+  hosts: villarreal
+  become: true
+  remote_user: ubuntu
+  vars:
+    app_folder: /home/ubuntu/apps/drupal
+    app_name: drupal
+
+  tasks:
+
+    - name: Create app folder if it doesn't exist
+      file:
+        path: "{{ app_folder }}"
+        state: directory
+        owner: ubuntu
+        group: ubuntu
+        mode: '0755'
+
+    - name: Check if app is running
+      command: docker compose -f "{{ app_folder }}/{{ app_name }}.yml" ps -q
+      register: app_check
+      changed_when: false
+      ignore_errors: true
+
+    - name: Stop application if app is running
+      command: docker compose -f "{{ app_folder }}/{{ app_name }}.yml" down
+      args:
+        chdir: "{{ app_folder }}"
+      when: app_check.stdout != ""
+
+    - name: Copy Docker Compose file to app_folder 
+      copy:
+        src: ./{{ app_name }}.yml
+        dest: "{{ app_folder }}/{{ app_name }}.yml"
+        mode: '0644'
+        owner: ubuntu
+        group: ubuntu
+
+    - name: Start application Docker Compose file
+      command: docker compose -f "{{ app_folder }}/{{ app_name }}.yml" up -d
+      args:
+        chdir: "{{ app_folder }}"

@@ -1,0 +1,43 @@
+---
+- hosts: villarreal
+  gather_facts: no
+  tasks:
+
+    - name: Ensure network exists
+      command: docker network create proxy-network
+      register: network_result
+      failed_when: network_result.rc != 0 and 'already exists' not in network_result.stderr
+
+    - name: Stop all docker compose last traefik
+      community.docker.docker_compose:
+        project_src: "/home/ubuntu/apps/{{ item.dir }}"
+        files: ["{{ item.file }}"]
+        state: absent
+      loop:
+        - dir: moodle
+          file: moodle.yml
+        - dir: bienesraices
+          file: bienesraices.yml
+        - dir: nextcloud
+          file: nextcloud.yml
+        - dir: traefik
+          file: traefik2.yml
+
+    - name: Start and Ensure traefik is running
+      community.docker.docker_compose:
+        project_src: "/home/ubuntu/apps/traefik"
+        files: ["traefik2.yml"]
+        state: present
+
+    - name: Start other docker-compose projects
+      community.docker.docker_compose:
+        project_src: "/home/ubuntu/apps/{{ item.dir }}"
+        files: ["{{ item.file }}"]
+        state: present
+      loop:
+        - dir: moodle
+          file: moodle.yml
+        - dir: bienesraices
+          file: bienesraices.yml
+        - dir: nextcloud
+          file: nextcloud.yml

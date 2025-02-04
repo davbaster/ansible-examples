@@ -1,0 +1,131 @@
+version: '3.9'
+
+services:
+  mariadb:
+    image: bitnami/mariadb:11.0.3
+
+    networks:
+      - moodle-net
+    restart: always
+    environment:
+      - MARIADB_USER=bn_moodle
+      - MARIADB_PASSWORD=${PASSWORD}
+      - MARIADB_ROOT_PASSWORD=${PASSWORD}
+      - MARIADB_DATABASE=bitnami_moodle
+      - MARIADB_CHARACTER_SET=utf8mb4
+      - MARIADB_COLLATE=utf8mb4_unicode_ci
+    
+    healthcheck:
+      test: ['CMD', '/opt/bitnami/scripts/mariadb/healthcheck.sh']
+      interval: 15s
+      timeout: 5s
+      retries: 6
+
+    labels:
+      - "traefik.enable=false"
+    #labels for offen/docker-volume-backup
+      - docker-volume-backup.stop-during-backup=true
+
+    env_file: ./.env
+    volumes:
+      - 'mariadb_data:/bitnami/mariadb'
+
+  moodle:
+    #image: bitnami/moodle:4.2.2
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    labels:
+    #labels for traefik proxy
+      - "traefik.enable=true"
+      - traefik.docker.network=proxy-network
+      - "traefik.http.routers.moodle.rule=Host(`educacion.{{server}}.com`)"
+      - "traefik.http.routers.moodle.entrypoints=web,websecure"
+      - "traefik.http.routers.moodle.tls.certresolver=myresolver"
+      - "traefik.http.services.moodle.loadbalancer.server.port=8080"
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+      - "traefik.http.routers.moodle.middlewares=redirect-to-https"
+    #labels for offen/docker-volume-backup
+      - docker-volume-backup.stop-during-backup=true
+    networks:
+      - moodle-net
+      - proxy-network
+    restart: always
+    environment:
+      - BITNAMI_DEBUG=false
+      - MOODLE_DATABASE_HOST=mariadb
+      - MOODLE_DATABASE_USER=bn_moodle
+      - MOODLE_DATABASE_NAME=bitnami_moodle
+      - MOODLE_DATABASE_PASSWORD=${PASSWORD}
+      - MOODLE_DATABASE_ROOT_PASSWORD=${PASSWORD}
+      - MOODLE_SITE_NAME=${MOODLE_SITE_NAME}
+      - MOODLE_USERNAME=${MOODLE_USER}
+      - MOODLE_PASSWORD=${PASSWORD}
+      - MOODLE_URL=${MOODLE_URL}
+      - APACHE_HTTP_PORT_NUMBER=8080
+      - APACHE_HTTPS_PORT_NUMBER=8443
+    env_file: ./.env
+    volumes:
+      - 'moodle_data:/bitnami/moodle'
+      - 'moodledata_data:/bitnami/moodledata'
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      
+  backup_mariadb:
+    image: offen/docker-volume-backup:v2.30.0
+    restart: always
+    environment:
+      - S3_ENDPOINT=${S3_ENDPOINT}
+      - S3_BUCKET=${S3_BUCKET}
+      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION}
+      - BACKUP_CRON_EXPRESSION=0 19 * * *
+      - BACKUP_FILENAME=moodle-db-%Y-%m-%dT%H-%M-%S.tar.gz
+      - BACKUP_RETENTION_DAYS=7
+      - BACKUP_PRUNING_PREFIX=moodle-db-
+      - AWS_S3_PATH=moodle_demo/db
+
+    env_file: ./.env
+    volumes:
+      - mariadb_data:/backup/moodle_db:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - moodle
+
+    command: /backup.sh
+
+  backup_moodledata:
+    image: offen/docker-volume-backup:v2.30.0
+    restart: always
+    environment:
+      - S3_ENDPOINT=${S3_ENDPOINT}
+      - S3_BUCKET=${S3_BUCKET}
+      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION}
+      - BACKUP_CRON_EXPRESSION=0 19 * * *
+      - BACKUP_FILENAME=moodle-data-%Y-%m-%dT%H-%M-%S.tar.gz
+      - BACKUP_RETENTION_DAYS=7
+      - BACKUP_PRUNING_PREFIX=moodle-data-
+      - AWS_S3_PATH=moodle_demo/data
+
+    env_file: ./.env
+    volumes:
+      - moodledata_data:/backup/moodle_data:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - moodle
+
+    command: /backup.sh
+
+volumes:
+  mariadb_data:
+    driver: local
+  moodle_data:
+    driver: local
+  moodledata_data:
+    driver: local
+
+networks:
+  moodle-net:
+  proxy-network:
+    external: true

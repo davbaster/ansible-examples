@@ -1,0 +1,45 @@
+---
+- name: copy moodle files and start application
+  hosts: villarreal
+  become: true
+  remote_user: ubuntu
+  vars:
+    moodle_folder: /home/ubuntu/apps/moodle-asesoria
+
+  tasks:
+    - name: Create moodle folder if it doesn't exist
+      file:
+        path: "{{ moodle_folder }}"
+        state: directory
+        owner: ubuntu
+        group: ubuntu
+        mode: '0755'
+
+    - name: Stop Moodle if app is running
+      command: docker-compose -f "{{ moodle_folder }}/moodle-asesoria.yml" down
+      args:
+        chdir: "{{ moodle_folder }}"
+      ignore_errors: yes
+
+    - name: Copy Docker Compose file to moodle_folder 
+      copy:
+        src: ./moodle-asesoria.yml
+        dest: "{{ moodle_folder }}/moodle-asesoria.yml"
+        mode: '0644'
+        owner: ubuntu
+        group: ubuntu
+
+    - name: Start moodle app Docker Compose file
+      command: docker-compose -f "{{ moodle_folder }}/moodle-asesoria.yml" up -d
+      args:
+        chdir: "{{ moodle_folder }}"
+      register: docker_compose_up
+      failed_when: 'docker_compose_up.stderr is match("Error: \[\d+\]")'
+
+    - name: Check if app is running
+      command: docker-compose -f "{{ moodle_folder }}/moodle-asesoria.yml" ps -q
+      register: moodle_check
+      changed_when: false
+      failed_when: false
+      ignore_errors: true
+

@@ -1,0 +1,55 @@
+version: '3.7'
+
+services:
+  drupal:
+    image: bitnami/drupal:9.5.10
+    restart: always
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.drupal.rule=Host(`drupal.{{server}}.net`)"
+      - "traefik.http.routers.drupal.entrypoints=websecure"
+      - "traefik.http.routers.drupal.tls.certresolver=myresolver"
+      - "traefik.http.services.drupal.loadbalancer.server.port=8081"
+    environment:
+      - DRUPAL_USERNAME=david
+      - DRUPAL_PASSWORD=drupal_david
+      - DRUPAL_DB_HOST=mariadb
+      - DRUPAL_DB_USER=bn_drupal
+      #- DRUPAL_DB_PASSWORD=drupal
+      - DRUPAL_DATABASE_PASSWORD=drupal 
+      - DRUPAL_DB_NAME=bitnami_drupal
+      - APACHE_HTTP_PORT_NUMBER=8081
+      #- APACHE_HTTPS_PORT_NUMBER=9443
+    volumes:
+      - drupal_data:/var/www/html
+    networks:
+      - proxy-network
+      - drupal-network
+
+  mariadb:
+    image: mariadb:10.3
+    restart: always
+    environment:
+      - MARIADB_ROOT_PASSWORD=root_password
+      - MARIADB_DATABASE=bitnami_drupal
+      - MARIADB_USER=bn_drupal
+      - MARIADB_PASSWORD=drupal
+      - MARIADB_CHARACTER_SET=utf8mb4
+      - MARIADB_COLLATE=utf8mb4_unicode_ci
+      
+    volumes:
+      - mariadb_drupal_data:/var/lib/mysql
+    networks:
+      - drupal-network
+
+networks:
+  proxy-network:
+    external: true
+  drupal-network:
+    driver: bridge
+
+volumes:
+  drupal_data:
+    driver: local
+  mariadb_drupal_data:
+    driver: local

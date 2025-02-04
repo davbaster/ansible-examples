@@ -1,0 +1,49 @@
+---
+- hosts: localhost
+  become: yes
+  tasks:
+    - name: Ensure docker is installed
+      apt:
+        name: docker
+        state: present
+        update_cache: yes
+
+    - name: Ensure directories exist
+      file:
+        path: "/home/ubuntu/apps/{{ item }}"
+        state: directory
+      loop:
+        - traefik
+        - moodle
+        - bienesraices
+
+    - name: Copy Docker Compose files to remote host
+      copy:
+        src: "resources/{{ item.src }}"
+        dest: "/home/ubuntu/apps/{{ item.dest }}"
+      loop:
+        - src: traefik/traefik.yml
+          dest: traefik/traefik.yml
+        - src: moodle/moodle.yml
+          dest: moodle/moodle.yml
+        - src: bienesraices/bienesraices.yml
+          dest: bienesraices/bienesraices.yml
+
+    - name: Ensure network exists
+      command: docker network create proxy-network
+      register: network_result
+      failed_when: network_result.rc != 0 and 'already exists' not in network_result.stderr
+
+    - name: Ensure traefik is running
+      shell:
+        cmd: "docker compose -f /home/ubuntu/apps/traefik/traefik.yml up -d"
+        chdir: /home/ubuntu/apps/traefik/
+
+    - name: Ensure other docker-compose projects are running
+      shell:
+        cmd: "docker compose -f /home/ubuntu/apps/{{ item }} up -d"
+        chdir: /home/ubuntu/apps/
+      loop:
+        - moodle/moodle.yml
+        - bienesraices/bienesraices.yml
+...

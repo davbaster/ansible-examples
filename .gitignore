@@ -1,0 +1,5 @@
+.vagrant
+vault.yml
+vault-pass.txt
+*.ini
+*.env

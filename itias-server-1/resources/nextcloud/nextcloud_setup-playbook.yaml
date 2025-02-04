@@ -1,0 +1,116 @@
+---
+#when: docker_check.rc != 0, if return code is not 0, it means that Docker is not installed
+
+- name: Install Docker and create Traefik network
+  hosts: localhost
+  become: true
+  vars:
+    nextcloud_folder: /home/ubuntu/apps/nextcloud
+
+  tasks:
+    - name: Check if Docker is installed
+      command: docker --version
+      register: docker_version
+      ignore_errors: true
+
+    - name: Get Ubuntu codename
+      command: lsb_release -cs
+      register: ubuntu_codename
+      changed_when: false
+      when: docker_version.failed
+
+    - name: Install Docker dependencies
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - software-properties-common
+          - gnupg-agent
+        state: present
+        update_cache: yes
+      when: docker_version.failed
+
+    - name: Add Docker's official GPG key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+      when: docker_version.failed
+
+    - name: Remove existing Docker repository configuration
+      command: rm /etc/apt/sources.list.d/docker.list
+      ignore_errors: true
+      when: docker_version.failed
+
+    - name: Add Docker's official APT repository
+      apt_repository:
+        repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ubuntu_codename.stdout }} stable"
+        state: present
+      when: docker_version.failed
+
+    - name: Ensure Docker is installed
+      apt:
+        name: 
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+        update_cache: yes
+      when: docker_version.failed
+
+    - name: Ensure Docker service is started and enabled at boot
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Ensure network exists
+      command: docker network create proxy-network
+      register: network_result
+      failed_when: network_result.rc != 0 and 'already exists' not in network_result.stderr
+
+    - name: Create Nextcloud folder if it doesn't exist
+      file:
+        path: "{{ nextcloud_folder }}"
+        state: directory
+        owner: ubuntu
+        group: ubuntu
+        mode: '0755'
+
+    - name: Stop Nextcloud if app is running
+      command: docker compose -f "{{ nextcloud_folder }}/nextcloud.yml" down
+      args:
+        chdir: "{{ nextcloud_folder }}"
+      ignore_errors: yes
+
+    - name: Copy Docker Compose file to Nextcloud folder
+      copy:
+        src: ./nextcloud.yml
+        dest: "{{ nextcloud_folder }}/nextcloud.yml"
+        mode: '0644'
+        owner: ubuntu
+        group: ubuntu
+
+    - name: Copy .env file to Nextcloud folder
+      copy:
+        src: ./.env
+        dest: "{{ nextcloud_folder }}/.env"
+        mode: '0644'
+        owner: ubuntu
+        group: ubuntu
+
+    - name: Start Nextcloud app Docker Compose file
+      command: docker compose --env-file {{ nextcloud_folder }}/.env -f "{{ nextcloud_folder }}/nextcloud.yml" up -d
+      args:
+        chdir: "{{ nextcloud_folder }}"
+      register: docker_compose_up
+      failed_when: 'docker_compose_up.stderr is match("Error: \[\d+\]")'
+
+    - name: Check if Nextcloud is running
+      command: docker compose -f "{{ nextcloud_folder }}/nextcloud.yml" ps -q
+      register: nextcloud_check
+      changed_when: false
+      failed_when: false
+      ignore_errors: true

@@ -1,0 +1,59 @@
+---
+- name: Install Docker on Fedora
+  hosts: local
+  become: yes
+  become_user: root
+  vars_files:
+    - vault.yml
+
+  tasks:
+    - name: Ensure dnf is up-to-date
+      dnf:
+        name: "*"
+        state: latest
+
+    - name: Install required dependencies
+      dnf:
+        name:
+          - dnf-plugins-core
+          - device-mapper-persistent-data
+          - lvm2
+        state: present
+
+    - name: Add Docker's official repository
+      command: >
+        dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo
+      args:
+        creates: /etc/yum.repos.d/docker-ce.repo
+
+    - name: Install Docker CE
+      dnf:
+        name: docker-ce
+        state: present
+
+    - name: Enable and start Docker service
+      systemd:
+        name: docker
+        enabled: yes
+        state: started
+
+    # Post-install actions
+    - name: Add user to the docker group
+      command: usermod -aG docker {{ ansible_user }}
+      notify: restart_docker
+
+    - name: Verify Docker is running
+      command: docker info
+      register: docker_info
+      failed_when: "'Server Version' not in docker_info.stdout"
+
+    - name: Display a warning about group membership
+      debug:
+        msg: >
+          "The user {{ ansible_user }} has been added to the docker group. You must log out and log back in to apply this change."
+
+  handlers:
+    - name: restart_docker
+      systemd:
+        name: docker
+        state: restarted

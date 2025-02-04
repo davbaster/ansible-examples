@@ -1,0 +1,57 @@
+---
+- hosts: villarreal
+  become: yes
+  tasks:
+    - name: Ensure docker is installed
+      apt:
+        name: docker
+        state: present
+        update_cache: yes
+
+    - name: Ensure network exists
+      command: docker network create proxy-network
+      register: network_result
+      failed_when: network_result.rc != 0 and 'already exists' not in network_result.stderr
+
+    - name: stop traefik
+      shell:
+        cmd: "docker compose -f /home/ubuntu/apps/traefik/traefik2.yml down"
+        chdir: /home/ubuntu/apps/traefik/
+
+    - name: stop all docker compose last traefik
+      shell:
+        cmd: "docker compose -f {{ item }} down"
+        chdir: /home/ubuntu/apps/
+      loop:
+        - moodle/moodle.yml
+        - drupal/drupal.yml
+        - bienesraices/bienesraices.yml
+        - nextcloud/nextcloud.yml
+
+    # Pause for 1 minutes to allow traefik to stop
+    - pause:
+        minutes: 1
+
+    - name: Start and Ensure traefik is running
+      shell:
+        cmd: "docker compose -f /home/ubuntu/apps/traefik/traefik2.yml up -d"
+        chdir: /home/ubuntu/apps/traefik/
+
+    # Pause for 1 minutes to allow traefik to start
+    - pause:
+        minutes: 1
+
+    - name: Start and Ensure moodle is running
+      shell:
+        cmd: "docker compose -f /home/ubuntu/apps/moodle/moodle.yml up -d"
+        chdir: /home/ubuntu/apps/moodle/
+
+    - name: Start other docker-compose projects
+      shell:
+        cmd: "docker compose -f {{ item }} up -d"
+        chdir: /home/ubuntu/apps/
+      loop:
+        #- drupal/drupal.yml
+        - bienesraices/bienesraices.yml
+        #- nextcloud/nextcloud.yml
+...

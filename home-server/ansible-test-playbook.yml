@@ -1,0 +1,19 @@
+---
+- name: Test become_password
+  hosts: local
+  become: yes
+  become_user: root
+  vars_files:
+    - vault.yml
+
+  tasks:
+    - name: Debug become_password
+      debug:
+        msg: "{{ become_password }}"
+
+    - name: Debug ansible user
+      debug:
+        msg: "{{ ansible_user }}"
+
+    - name: Verify sudo access
+      command: whoami
