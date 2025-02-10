@@ -1,0 +1,72 @@
+---
+- hosts: aws_servers
+  become: yes
+  tasks:
+    - name: Ensure required Docker volumes exist
+      shell: "docker volume create {{ item }}"
+      loop:
+        - traefik_letsencrypt
+        - traefik_logs
+        - n8n_storage
+      ignore_errors: yes  # Prevents error if volume already exists
+
+    - name: Ensure directories exist
+      file:
+        path: "/home/ec2-user/apps/{{ item }}"
+        state: directory
+        owner: ec2-user
+        group: ec2-user
+        mode: '0755'
+      loop:
+        - traefik
+        - n8n
+
+    - name: Copy Docker Compose files
+      copy:
+        src: "resources/{{ item.src }}"
+        dest: "/home/ec2-user/apps/{{ item.dest }}"
+        owner: ec2-user
+        group: ec2-user
+        mode: '0644'
+      loop:
+        - src: traefik/traefik3.yml
+          dest: traefik/traefik3.yml
+        - src: n8n/n8n.yml
+          dest: n8n/n8n.yml
+
+    - name: Copy environment (.env) files securely
+      copy:
+        src: "resources/{{ item.src }}"
+        dest: "/home/ec2-user/apps/{{ item.dest }}"
+        owner: ec2-user
+        group: ec2-user
+        mode: '0600'
+      loop:
+        - src: traefik/.env
+          dest: traefik/.env
+        - src: n8n/.env
+          dest: n8n/.env
+
+    - name: Ensure Docker network exists
+      shell: |
+        docker network inspect proxy-network || docker network create proxy-network
+
+    - name: Pull required Docker images (traefik)
+      shell: "docker compose -f traefik3.yml pull"
+      args:
+        chdir: /home/ec2-user/apps/traefik/
+
+    - name: Pull required Docker images (n8n)
+      shell: "docker compose -f n8n.yml pull"
+      args:
+        chdir: /home/ec2-user/apps/n8n/
+
+    - name: Ensure traefik is running
+      shell: "docker compose -f traefik3.yml up -d"
+      args:
+        chdir: /home/ec2-user/apps/traefik/
+
+    - name: Ensure other docker-compose projects are running
+      shell: "docker compose -f n8n.yml up -d"
+      args:
+        chdir: /home/ec2-user/apps/n8n/

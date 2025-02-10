@@ -1,0 +1,61 @@
+---
+- name: copy app files and start application
+  hosts: villarreal
+  become: true
+  remote_user: ubuntu
+  vars:
+    app_name: traefik
+    app_folder: /home/ubuntu/apps/"{{ app_folder }}"/
+
+  tasks:
+
+    - name: Create app folder if it doesn't exist
+      file:
+        path: "{{ app_folder }}"
+        state: directory
+        owner: ubuntu
+        group: ubuntu
+        mode: '0755'
+
+    - name: Check if app is running
+      command: docker compose -f "{{ app_name }}.yml" ps -q
+      args:
+        chdir: "{{ app_folder }}"
+      register: app_check
+      changed_when: false
+      ignore_errors: true
+
+    - name: Stop application if app is running
+      command: docker compose -f "{{ app_name }}.yml" down
+      args:
+        chdir: "{{ app_folder }}"
+      when: app_check.stdout != ""
+
+    - name: Copy Docker Compose file to app_folder 
+      copy:
+        src: ./{{ app_name }}.yml
+        dest: "{{ app_folder }}/{{ app_name }}.yml"
+        mode: '0644'
+        owner: ubuntu
+        group: ubuntu
+
+    # - name: Copy Dockerfile to app_folder 
+    #   copy:
+    #     src: ./Dockerfile
+    #     dest: "{{ app_folder }}/Dockerfile"
+    #     mode: '0644'
+    #     owner: ubuntu
+    #     group: ubuntu
+
+    # - name: Copy .env file to app_folder 
+    #   copy:
+    #     src: ./.env
+    #     dest: "{{ app_folder }}/.env"
+    #     mode: '0644'
+    #     owner: ubuntu
+    #     group: ubuntu
+
+    - name: Start application Docker Compose file
+      command: docker compose -f "{{ app_name }}.yml" up -d
+      args:
+        chdir: "{{ app_folder }}"

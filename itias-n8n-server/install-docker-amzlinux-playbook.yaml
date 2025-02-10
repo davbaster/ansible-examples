@@ -1,0 +1,56 @@
+---
+- hosts: aws_servers
+  become: yes
+  tasks:
+    - name: Update the EC2 instance (optional but recommended)
+      dnf:
+        name: "*"
+        state: latest
+      when: update_system | default(false)
+
+    - name: Ensure Docker is installed
+      dnf:
+        name: docker
+        state: present
+        update_cache: yes
+
+    - name: Enable Docker service to start on boot
+      systemd:
+        name: docker
+        enabled: yes
+
+    - name: Start Docker service
+      systemd:
+        name: docker
+        state: started
+
+    - name: Ensure ec2-user is added to the docker group
+      user:
+        name: ec2-user
+        groups: docker
+        append: yes
+
+    - name: Check if Docker Compose is installed
+      command: docker compose version
+      register: docker_compose_check
+      ignore_errors: yes
+
+    - name: Install Docker Compose Plugin if missing
+      dnf:
+        name: docker-compose-plugin
+        state: present
+      when: docker_compose_check.rc != 0
+
+    - name: Wait for Docker daemon to be ready
+      shell: |
+        until docker info >/dev/null 2>&1; do sleep 2; done
+      retries: 5
+      delay: 2
+      register: docker_ready
+      changed_when: false
+
+    - name: Restart EC2 instance to apply changes
+      command: "shutdown -r now"
+      async: 1
+      poll: 0
+      ignore_errors: yes

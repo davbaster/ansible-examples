@@ -1,0 +1,26 @@
+---
+- hosts: villarreal
+  become: yes
+  tasks:
+    - name: Ensure docker is installed
+      apt:
+        name: docker
+        state: present
+        update_cache: yes
+
+    - name: stop traefik
+      shell:
+        cmd: "docker compose -f /home/ubuntu/apps/traefik/traefik2.yml down"
+        chdir: /home/ubuntu/apps/traefik/
+
+    - name: stop all docker compose last traefik
+      shell:
+        cmd: "docker compose -f {{ item }} down"
+        chdir: /home/ubuntu/apps/
+      loop:
+        - moodle/moodle.yml
+        - drupal/drupal.yml
+        - bienesraices/bienesraices.yml
+        - nextcloud/nextcloud.yml
+
+...

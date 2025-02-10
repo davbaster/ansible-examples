@@ -1,0 +1,76 @@
+---
+- hosts: aws_servers
+  become: yes
+  tasks:
+  
+    - name: Ensure directories exist
+      file:
+        path: "/home/ec2-user/apps/{{ item }}"
+        state: directory
+        owner: ec2-user
+        group: ec2-user
+        mode: '0755'
+      loop:
+        - traefik
+        - n8n
+
+    - name: Copy Docker Compose files
+      copy:
+        src: "resources/{{ item.src }}"
+        dest: "/home/ec2-user/apps/{{ item.dest }}"
+        owner: ec2-user
+        group: ec2-user
+        mode: '0644'
+      loop:
+        - src: traefik/traefik3.yml
+          dest: traefik/traefik3.yml
+        - src: n8n/n8n.yml
+          dest: n8n/n8n.yml
+
+    - name: Copy environment (.env) files securely
+      copy:
+        src: "resources/{{ item.src }}"
+        dest: "/home/ec2-user/apps/{{ item.dest }}"
+        owner: ec2-user
+        group: ec2-user
+        mode: '0600'
+      loop:
+        - src: traefik/.env
+          dest: traefik/.env
+        - src: n8n/.env
+          dest: n8n/.env
+
+    - name: Ensure Docker network exists
+      shell: |
+        docker network inspect proxy-network || docker network create proxy-network
+
+    # --- STOP SERVICES (EXCEPT TRAEFIK) ---
+    
+    - name: Stop n8n service
+      shell: "docker compose -f n8n.yml down"
+      args:
+        chdir: /home/ec2-user/apps/n8n/
+      ignore_errors: yes
+
+    - name: Stop Traefik service
+      shell: "docker compose -f traefik3.yml down"
+      args:
+        chdir: /home/ec2-user/apps/traefik/
+      ignore_errors: yes
+
+
+    # --- START SERVICES IN ORDER ---
+    
+    - name: Start Traefik service first
+      shell: "docker compose -f traefik3.yml up -d"
+      args:
+        chdir: /home/ec2-user/apps/traefik/
+
+    - name: Wait for Traefik to be ready
+      pause:
+        seconds: 15
+
+    - name: Start n8n service
+      shell: "docker compose -f n8n.yml up -d"
+      args:
+        chdir: /home/ec2-user/apps/n8n/

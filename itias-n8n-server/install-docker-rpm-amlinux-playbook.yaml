@@ -1,0 +1,85 @@
+---
+- name: Install Docker components from RPM on Amazon Linux 2023
+  hosts: aws_servers
+  become: yes
+  vars:
+    architecture: "el9.x86_64"
+    buildx_version: "0.20.0-1"
+    compose_version: "2.6.0-3"  # No newer version found; remains the same.
+    containerd_version: "1.7.25-3.1"
+    docker_rpm_base_url: "https://download.docker.com/linux/centos/9/x86_64/stable/Packages"
+    docker_version: "27.5.1-1"  
+    scan_version: "0.23.0-3"  # No newer version found; remains the same.
+  tasks:
+    - name: Remove docker
+      ansible.builtin.dnf:
+        name: docker
+        state: absent
+
+    - name: Install required packages
+      package:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - iptables-libs
+        - iptables-nft
+        - libcgroup
+        - libnetfilter_conntrack
+        - libnfnetlink
+        - libnftnl
+        - runc
+        - yum-utils
+
+    - name: Install Docker components from RPMs
+      ansible.builtin.dnf:
+        name: "{{ docker_rpm_base_url }}/{{ item }}"
+        state: present
+        disable_gpg_check: true
+      loop:
+        - "containerd.io-{{ containerd_version }}.{{ architecture }}.rpm"
+        - "docker-ce-cli-{{ docker_version }}.{{ architecture }}.rpm"
+        - "docker-buildx-plugin-{{ buildx_version }}.{{ architecture }}.rpm"
+        - "docker-ce-{{ docker_version }}.{{ architecture }}.rpm"
+        - "docker-compose-plugin-{{ compose_version }}.{{ architecture }}.rpm"
+        - "docker-scan-plugin-{{ scan_version }}.{{ architecture }}.rpm"
+
+    #- name: Ensure Docker is installed
+    #  dnf:
+    #    name: docker
+    #    state: present
+    #    update_cache: yes
+
+    - name: Enable Docker service to start on boot
+      systemd:
+        name: docker
+        enabled: yes
+
+    - name: Start Docker service
+      systemd:
+        name: docker
+        state: started
+
+    - name: Ensure ec2-user is added to the docker group
+      user:
+        name: ec2-user
+        groups: docker
+        append: yes
+
+    - name: Check if Docker Compose is installed
+      command: docker compose version
+      register: docker_compose_check
+      ignore_errors: yes
+
+    - name: Wait for Docker daemon to be ready
+      shell: |
+        until docker info >/dev/null 2>&1; do sleep 2; done
+      retries: 5
+      delay: 2
+      register: docker_ready
+      changed_when: false
+
+    - name: Restart EC2 instance to apply changes
+      command: "shutdown -r now"
+      async: 1
+      poll: 0
+      ignore_errors: yes
