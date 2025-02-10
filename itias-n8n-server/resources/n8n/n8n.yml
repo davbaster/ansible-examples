@@ -5,16 +5,16 @@ services:
     image: docker.n8n.io/n8nio/n8n:latest
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.n8n.rule=Host(`${SERVER}`)"
+      - "traefik.http.routers.n8n.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`)"
       - "traefik.http.routers.n8n.entrypoints=websecure"
       - "traefik.http.routers.n8n.tls.certresolver=myresolver"
       - "traefik.http.services.n8n.loadbalancer.server.port=5678"
       - "traefik.http.services.n8n.loadbalancer.server.scheme=http"
 
       # Enable WebSockets
-      - "traefik.http.middlewares.n8n-websockets.headers.customrequestheaders.Upgrade=websocket"
-      - "traefik.http.middlewares.n8n-websockets.headers.customrequestheaders.Connection=Upgrade"
-      - "traefik.http.routers.n8n.middlewares=n8n-websockets@docker"
+      #- "traefik.http.middlewares.n8n-websockets.headers.customrequestheaders.Upgrade=websocket"
+      #- "traefik.http.middlewares.n8n-websockets.headers.customrequestheaders.Connection=Upgrade"
+      #- "traefik.http.routers.n8n.middlewares=n8n-websockets@docker"
     
     networks:
       - proxy-network
@@ -23,13 +23,13 @@ services:
       - N8N_BASIC_AUTH_ACTIVE=true
       - N8N_BASIC_AUTH_USER=${USER}  # from .env file
       - N8N_BASIC_AUTH_PASSWORD=${PASSWORD}  # from .env file
-      - N8N_HOST=${SERVER}
+      - N8N_HOST=${SUBDOMAIN}.${DOMAIN_NAME}
       - N8N_PROTOCOL=https
       - N8N_PORT=5678
       - DB_TYPE=sqlite
-      - N8N_EDITOR_BASE_URL=https://`${SERVER}`
-      - WEBHOOK_TUNNEL_URL=https://`${SERVER}`/
-      - WEBHOOK_URL=https://`${SERVER}`/ # Ensures webhooks are correctly resolved
+      - N8N_EDITOR_BASE_URL=${SUBDOMAIN}.${DOMAIN_NAME}
+      - WEBHOOK_TUNNEL_URL=https://${SUBDOMAIN}.${DOMAIN_NAME}/
+      - WEBHOOK_URL=https://${SUBDOMAIN}.${DOMAIN_NAME}/ # Ensures webhooks are correctly resolved
     ports:
       - 5678:5678
     volumes:
