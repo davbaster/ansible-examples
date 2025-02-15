@@ -1,0 +1,1 @@
+https://github.com/n8n-io/n8n-hosting/blob/main/docker-compose/subfolderWithSSL/docker-compose.yml

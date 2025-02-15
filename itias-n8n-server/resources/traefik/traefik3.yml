@@ -4,6 +4,7 @@ services:
   traefik:
     image: traefik:v3.3.3
     command:
+      - '--api=true'
       - "--log.level=INFO"
       - "--accesslog=true"
       - "--accesslog.filePath=/logs/access.log"
@@ -19,6 +20,7 @@ services:
       - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
       - "--certificatesresolvers.myresolver.acme.email=${EMAIL}"
       - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
+
 
     ports:
       - "443:443"

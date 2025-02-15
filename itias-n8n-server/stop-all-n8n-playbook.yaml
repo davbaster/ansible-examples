@@ -1,0 +1,18 @@
+---
+- hosts: aws_servers
+  become: yes
+  tasks:
+
+    # --- STOP SERVICES (EXCEPT TRAEFIK) ---
+    
+    - name: Stop n8n service
+      shell: "docker compose -f n8n.yml down"
+      args:
+        chdir: /home/ec2-user/apps/n8n/
+      ignore_errors: yes
+
+    - name: Stop Traefik service
+      shell: "docker compose -f traefik3.yml down"
+      args:
+        chdir: /home/ec2-user/apps/traefik/
+      ignore_errors: yes

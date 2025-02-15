@@ -1,39 +1,63 @@
-version: '3.8'
-
 services:
   n8n:
-    image: docker.n8n.io/n8nio/n8n:latest
+    image: docker.n8n.io/n8nio/n8n
+    # You can remove the “ports” line if you want Traefik to be the only way in:
+    # ports:
+    #   - '5678:5678'
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.n8n.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`)"
       - "traefik.http.routers.n8n.entrypoints=websecure"
+      - "traefik.http.routers.n8n.tls=true"
       - "traefik.http.routers.n8n.tls.certresolver=myresolver"
-      - "traefik.http.services.n8n.loadbalancer.server.port=5678"
-      - "traefik.http.services.n8n.loadbalancer.server.scheme=http"
 
-      # Enable WebSockets
-      #- "traefik.http.middlewares.n8n-websockets.headers.customrequestheaders.Upgrade=websocket"
-      #- "traefik.http.middlewares.n8n-websockets.headers.customrequestheaders.Connection=Upgrade"
-      #- "traefik.http.routers.n8n.middlewares=n8n-websockets@docker"
-    
+      # Important: route traffic to port 5678 inside the container
+      - "traefik.http.services.n8n.loadbalancer.server.port=5678"
+      # (Optional) if you want to specify 'scheme=http' explicitly:
+      # - "traefik.http.services.n8n.loadbalancer.server.scheme=http"
+
+      # Attach the headers middleware
+      - "traefik.http.routers.n8n.middlewares=n8nHeaders"
+
+      # Middlewares definition
+      - "traefik.http.middlewares.n8nHeaders.headers.SSLRedirect=true"
+      - "traefik.http.middlewares.n8nHeaders.headers.STSSeconds=315360000"
+      - "traefik.http.middlewares.n8nHeaders.headers.browserXSSFilter=true"
+      - "traefik.http.middlewares.n8nHeaders.headers.contentTypeNosniff=true"
+      - "traefik.http.middlewares.n8nHeaders.headers.forceSTSHeader=true"
+      - "traefik.http.middlewares.n8nHeaders.headers.SSLHost=${DOMAIN_NAME}"
+      - "traefik.http.middlewares.n8nHeaders.headers.STSIncludeSubdomains=true"
+      - "traefik.http.middlewares.n8nHeaders.headers.STSPreload=true"
+
     networks:
       - proxy-network
     restart: unless-stopped
+
     environment:
+      # Basic Auth
       - N8N_BASIC_AUTH_ACTIVE=true
-      - N8N_BASIC_AUTH_USER=${USER}  # from .env file
-      - N8N_BASIC_AUTH_PASSWORD=${PASSWORD}  # from .env file
+      - N8N_BASIC_AUTH_USER=${USER}
+      - N8N_BASIC_AUTH_PASSWORD=${PASSWORD}
+
+      # Host/Protocol
       - N8N_HOST=${SUBDOMAIN}.${DOMAIN_NAME}
       - N8N_PROTOCOL=https
       - N8N_PORT=5678
-      - DB_TYPE=sqlite
-      - N8N_EDITOR_BASE_URL=${SUBDOMAIN}.${DOMAIN_NAME}
-      - WEBHOOK_TUNNEL_URL=https://${SUBDOMAIN}.${DOMAIN_NAME}/
-      - WEBHOOK_URL=https://${SUBDOMAIN}.${DOMAIN_NAME}/ # Ensures webhooks are correctly resolved
-    ports:
-      - 5678:5678
+
+      # Editor & Webhook
+      - N8N_EDITOR_BASE_URL=https://${SUBDOMAIN}.${DOMAIN_NAME}
+      - WEBHOOK_URL=https://${SUBDOMAIN}.${DOMAIN_NAME}
+
+      # Production mode
+      - NODE_ENV=production
+
+      # REMOVE this line if you do not use a subpath
+      # - N8N_PATH
+
     volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
       - n8n_storage:/home/node/.n8n
+
 
 networks:
   proxy-network:
